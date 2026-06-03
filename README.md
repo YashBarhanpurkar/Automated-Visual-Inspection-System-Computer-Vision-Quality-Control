@@ -1,179 +1,146 @@
-# Automated Visual Inspection System — Computer Vision Quality Control
+# Manufacturing KPI Dashboard — Power BI Analytics Solution
 
-> A modular computer vision pipeline that automates product quality control on a simulated production line — classifying product variants by texture signature and enforcing ingredient distribution thresholds via automated Accept/Reject logic.
-
----
-
-## The Problem
-
-In food and consumer goods manufacturing, manual visual inspection is a production bottleneck: it is slow, inconsistent, and operator-dependent. A single shift change can introduce variance in what gets accepted or rejected. This project replaces manual auditing with an **automated, quantitative inspection pipeline** — applying computer vision to enforce consistent, data-driven quality thresholds across every unit on the line.
-
-This directly simulates the core engineering challenge in **Industrie 4.0 automated QC systems**: translating physical product properties into digital measurement signals, then executing automated pass/fail decisions.
+> A production-grade Power BI business intelligence solution demonstrating advanced data modelling, DAX engineering, and operational KPI dashboard design — built on the AdventureWorks manufacturing dataset covering $24.9M in revenue across 6 global markets.
 
 ---
 
-## System Architecture
+## Project Overview
 
-The pipeline is built as a modular, sequential processing chain — each stage feeds clean output to the next.
+This project builds a complete, multi-page Power BI analytics solution for **AdventureWorks** — a global manufacturing company producing cycling equipment. The dataset spans January 2020 to June 2022 across Australia, Canada, France, Germany, UK, and USA.
 
-```
-[ Raw Production Image ]
-        │
-        ▼
-[ 1. Pre-processing ]
-  - RGB → Grayscale + HSV conversion
-  - Gaussian blur (7×7 kernel) on both channels
-  - Dual-channel noise suppression
-        │
-        ▼
-[ 2. Segmentation ]
-  - Canny edge detection on Gray + Saturation channels (bitwise OR fusion)
-  - Morphological closing to seal contour boundaries
-  - Largest-contour extraction → binary product mask
-  - Morphological opening to remove edge artefacts
-        │
-        ▼
-[ 3. Feature Engineering ]
-  - GLCM texture features (Contrast, Homogeneity) — product type classification
-  - Entropy calculation (information complexity / surface detail density)
-  - HSV channel statistics (Avg Hue, Avg Saturation, Avg Intensity)
-        │
-        ▼
-[ 4. Quality Control — Ingredient Ratio Analysis ]
-  - Otsu's threshold on Saturation channel of isolated product
-  - Pixel-density quantification of ingredient distribution (chip_percentage)
-  - Automated Accept / Reject decision against predefined density bounds
-        │
-        ▼
-[ Output: Visual Audit Report — masks, histograms, feature metrics per unit ]
-```
+The focus is on the **engineering quality** of the solution: a clean star-schema data model, robust DAX measure design, production-grade ETL logic in Power Query (M), and a polished multi-page dashboard — the same skills required to build OEE, maintenance, and supply chain dashboards in a real manufacturing environment.
+
+**Data source:** Maven Analytics / Microsoft AdventureWorks sample databases
 
 ---
 
-## Technical Implementation
+## Dashboard Pages
 
-### Dual-Channel Edge Detection (Key Design Decision)
+| Page | Purpose | Key Metrics |
+|---|---|---|
+| **Executive Summary** | Cross-functional business health at a glance | Revenue, Profit, Orders, Return Rate with drill-through |
+| **Map View** | Geospatial market share analysis | Total orders by country — 6 global territories |
+| **Product Detail** | SKU-level performance vs. targets | Revenue per product, return %, What-If price adjustment |
+| **Customer Detail** | High-value customer identification | Per-customer revenue, order frequency, top customer segmentation |
 
-Standard CV pipelines run Canny edge detection on grayscale alone. This pipeline runs it on **both** the grayscale channel and the HSV Saturation channel simultaneously, then fuses the results with a bitwise OR:
+### Key Business Findings
 
-```python
-edges_gray = cv2.Canny(blurred_gray, 30, 100)
-edges_sat  = cv2.Canny(blurred_sat, 20, 80)
-edges      = cv2.bitwise_or(edges_gray, edges_sat)
-```
-
-This captures edges defined by brightness contrast (grayscale) AND edges defined by colour contrast (saturation) — producing a significantly more complete product boundary on items with low luminance contrast but high colour variation.
-
-### Texture Classification via GLCM
-
-Product type is classified using Gray-Level Co-occurrence Matrix (GLCM) features — a spatial texture descriptor computed at distance=5, angle=0°:
-
-```python
-glcm        = graycomatrix(gray, distances=[5], angles=[0], levels=256, symmetric=True, normed=True)
-contrast    = graycoprops(glcm, 'contrast')[0, 0]    # Surface roughness / edge intensity
-homogeneity = graycoprops(glcm, 'homogeneity')[0, 0] # Texture uniformity
-```
-
-**Contrast** measures local pixel intensity variation — higher for rough/complex surfaces. **Homogeneity** measures how close pixel pairs are to the diagonal — higher for smooth, uniform textures. Together these two features form a 2D feature space for product variant classification.
-
-### Ingredient Distribution Quantification
-
-The ingredient ratio (e.g., chocolate chip coverage) is computed by Otsu-thresholding the Saturation channel of the isolated product region:
-
-```python
-chip_thresh      = threshold_otsu(cookie_s_pixels)
-chip_mask        = (s_channel > chip_thresh) & cookie_pixels_mask
-chip_percentage  = (np.sum(chip_mask) / np.sum(cookie_pixels_mask)) * 100
-```
-
-This outputs a precise, reproducible percentage — replacing subjective human judgment with a mathematical threshold enforceable at line speed.
+- **Revenue:** $24.9M total / $10.5M profit over 2.5 years
+- **Seasonal peak:** December 2021 reached $1.64M — highest single month, indicating effective seasonal promotions
+- **Product mix:** Tires & Tubes are highest volume; Clothing & Accessories deliver highest margin
+- **Market efficiency:** USA leads by volume ($7.94M) but Australia leads by revenue-per-customer ($2,131)
 
 ---
 
-## Output Per Unit
+## Technical Highlights
 
-For each image processed, the system outputs:
+### Data Model — Star Schema Architecture
 
-| Output | Description |
-|---|---|
-| Original image | Source reference |
-| Grayscale | Luminance channel |
-| HSV | Colour space transformation |
-| Binary mask | Segmented product boundary |
-| Isolated product | Background-removed unit |
-| HSV isolated | Colour analysis of product only |
-| Intensity histogram | Pixel distribution profile |
-| Chip mask | Ingredient coverage overlay |
-| Feature metrics | Hue, Saturation, Intensity, Contrast, Homogeneity, Entropy, Chip% |
+A clean star schema with the `Fact_Sales` table at centre and 6 dimension tables:
+
+```
+Dim_Calendar ──┐
+Dim_Customer ──┤
+Dim_Product ───┼──► Fact_Sales ◄──── Fact_Returns
+Dim_Category ──┤
+Dim_SubCat ────┤
+Dim_Territory ─┘
+```
+
+**Cyclic reference resolution:** The product hierarchy (Category → Subcategory → Product) created a cyclic dependency that Power BI disables by default due to ambiguous filter propagation. This was resolved by restructuring the relationship chain — demonstrating awareness of how model errors cause incorrect aggregations in production reports.
+
+### Power Query (M) — ETL Engineering
+
+- **Folder Path Parameter:** The entire report reconnects to local data sources on any machine by updating a single parameter — no manual table re-pointing. This mirrors production deployment practice where dashboards connect to network drives or SharePoint.
+- **Multi-file append:** Fixed `Table to Binary` conversion errors during the file combination process to successfully stack 3 years of sales CSVs (2020, 2021, 2022) into a single unified fact table.
+- **Rolling calendar:** Built a continuous date dimension in M-code to support all time-intelligence DAX functions.
+
+### DAX Measure Engineering
+
+```dax
+-- Rolling 90-day revenue
+Revenue_90Day = 
+CALCULATE([Total Revenue], DATESINPERIOD('Calendar'[Date], LASTDATE('Calendar'[Date]), -90, DAY))
+
+-- YTD with prior year comparison
+Revenue_PY = CALCULATE([Total Revenue], SAMEPERIODLASTYEAR('Calendar'[Date]))
+
+-- Return rate
+Return_Rate = DIVIDE([Total Returns], [Total Orders], 0)
+
+-- Adjusted profit (What-If parameter)
+Adjusted_Profit = [Total Profit] * (1 + 'Price Adjustment'[Price Adjustment Value])
+```
 
 ---
 
 ## Technical Stack
 
-| Component | Library / Tool |
+| Tool | Usage |
 |---|---|
-| Computer Vision | OpenCV (`cv2`) |
-| Texture Analysis | scikit-image (`graycomatrix`, `graycoprops`, `threshold_otsu`) |
-| Numerical Processing | NumPy, SciPy (`entropy`) |
-| Visualisation | Matplotlib |
-| Language | Python 3 |
+| Power BI Desktop | Data modelling, DAX, dashboard design, custom navigation UI |
+| Power Query (M) | ETL transformation, file append, parameter-driven paths |
+| DAX | KPI measures, time-intelligence, What-If analysis |
+| AdventureWorks Dataset | Source data (Microsoft benchmark, via Maven Analytics) |
 
 ---
 
 ## Repository Structure
 
 ```
-Computer-Vision-Cookie-Inspection-System/
+Adventure_Works_BI_Analytics/
 │
-├── notebooks/
-│   └── main.ipynb                    # Full pipeline execution and visual audit output
+├── Report/
+│   └── AdventureWorks_Final.pbix          # Full Power BI report file
 │
-├── src/
-│   └── inspection_pipeline.py        # Modular pipeline (production-ready structure)
+├── AdventureWorks Raw Data/
+│   ├── Sales Data/                         # Annual sales CSVs (2020, 2021, 2022)
+│   ├── AdventureWorks Customer Lookup.csv
+│   ├── AdventureWorks Product Lookup.csv
+│   ├── AdventureWorks Calendar Lookup.csv
+│   ├── AdventureWorks Territory Lookup.csv
+│   ├── AdventureWorks Returns Data.csv
+│   └── ...
 │
-├── data/
-│   └── cookies_exampleclass/         # Input image batch (110 production line images)
-│
-└── requirements.txt
+├── Images/                                 # Custom navigation icons for dashboard UI
+├── Documentation/
+│   └── AdventureWorks_Final.pdf           # PDF export of full report
+└── README.md
 ```
 
 ---
 
-## Manufacturing Relevance (Industrie 4.0)
+## Manufacturing Relevance
 
-This project demonstrates the engineering stack behind **Automated Optical Inspection (AOI)** systems used in real production environments:
+The data model architecture and DAX patterns in this solution are **directly transferable** to industrial KPI dashboards:
 
-| Pipeline Stage | Industrial Equivalent |
+| AdventureWorks Pattern | Manufacturing Equivalent |
 |---|---|
-| Dual-channel segmentation | Background subtraction in machine vision cameras |
-| GLCM texture classification | Surface defect detection (PCB, metal parts, textiles) |
-| Ingredient ratio thresholding | Fill-level / content distribution QC (pharma, food, packaging) |
-| Accept/Reject automation | PLC-triggered reject actuator on conveyor line |
-| Batch processing loop | Frame-by-frame processing in line-scan camera systems |
+| Rolling 90-day revenue | Rolling OEE trend (7-day, 30-day shopfloor window) |
+| Return rate by SKU | Defect / scrap rate by part number or machine |
+| YTD orders vs. target | YTD production output vs. capacity plan |
+| Territory drill-through | Production line / shift / machine drill-through |
+| What-If price adjustment | What-If parameter for OEE target thresholds |
+| Seasonal revenue peaks | Seasonal demand planning for production scheduling |
 
-The modular function architecture (`identify_cookie()`) mirrors the design of production vision modules where each processing stage is independently testable, replaceable, and scalable to multi-camera setups.
+A factory OEE tracker, downtime dashboard, or supply chain KPI report uses the **identical star schema, DAX calculation patterns, and drill-through UX** as this solution — with production telemetry replacing sales transactions.
 
 ---
 
 ## Future Roadmap
 
-- [ ] Quantify and report classification accuracy across the full 110-image batch
-- [ ] Add a labelled dataset and train a CNN classifier for multi-class product variant detection
-- [ ] Implement processing speed benchmark (ms/image) to establish line-speed viability
-- [ ] Extend Accept/Reject logic to multi-parameter composite scoring (texture + ingredient ratio + shape)
-- [ ] Package `inspection_pipeline.py` as a deployable module with a config-driven threshold file
+- [ ] Rebuild with a manufacturing-specific dataset (OEE, downtime logs, scrap records) to demonstrate direct shopfloor applicability
+- [ ] Add Row-Level Security (RLS) for shift-manager vs. plant-manager access separation
+- [ ] Connect to a live SQL database backend (simulating MES data export) for scheduled refresh
 
 ---
 
 ## Setup
 
-```bash
-git clone https://github.com/YashBarhanpurkar/cookie-inspection.git
-cd cookie-inspection
-pip install -r requirements.txt
-# Open notebooks/main.ipynb in Jupyter
-# Place production images in data/cookies_exampleclass/
-```
+1. Clone the repository
+2. Open `Report/AdventureWorks_Final.pbix` in Power BI Desktop
+3. Update the `FolderPath` parameter to point to your local `AdventureWorks Raw Data/` directory
+4. Refresh data — all tables will reconnect automatically
 
 ---
 
@@ -185,4 +152,4 @@ M.Sc. Global Production Engineering — Technische Universität Berlin
 
 ---
 
-*Topics: `computer-vision` `opencv` `quality-control` `automated-inspection` `industrie-4-0` `python` `glcm` `production-line` `manufacturing` `image-processing`*
+*Topics: `power-bi` `dax` `data-modelling` `star-schema` `manufacturing-analytics` `business-intelligence` `kpi-dashboard` `power-query` `oee` `adventureworks`*
